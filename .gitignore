@@ -10,5 +10,3 @@ myapp/__pycache__/
 myapp/migrations/__pycache__/ 
 node_modules/
 .vscode/
-.idea/
-.DS_Store   
