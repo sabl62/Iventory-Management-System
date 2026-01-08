@@ -1,0 +1,235 @@
+"""
+Django Inventory Management System Structure
+
+inventory_project/
+│
+├── manage.py                    # Django management script
+│
+├── inventory_project/           # Project settings folder
+│   ├── __init__.py
+│   ├── settings.py              # Main settings (LOGIN CREDENTIALS, DB config)
+│   ├── urls.py                  # Root URL configuration
+│   ├── wsgi.py
+│   └── asgi.py
+│
+├── inventory/                   # Main app folder
+│   ├── __init__.py
+│   ├── admin.py                 # Django admin configuration
+│   ├── apps.py
+│   ├── models.py                # Database models (Stock, Projects, Allocations)
+│   ├── views.py                 # View functions (replaces Flask routes)
+│   ├── urls.py                  # App-specific URLs
+│   ├── forms.py                 # Forms for data input
+│   │
+│   ├── templates/               # HTML templates
+│   │   └── inventory/
+│   │       ├── login.html
+│   │       ├── dashboard.html
+│   │       ├── main_stock.html
+│   │       ├── projects.html
+│   │       ├── allocate.html
+│   │       └── project_inventory.html
+│   │
+│   ├── static/                  # Static files
+│   │   └── inventory/
+│   │       ├── css/
+│   │       │   └── style.css
+│   │       ├── js/
+│   │       │   └── main.js
+│   │       └── images/
+│   │
+│   └── migrations/              # Database migrations (auto-generated)
+│       └── __init__.py
+│
+├── db.sqlite3                   # SQLite database (auto-created)
+├── requirements.txt             # Python dependencies
+└── .env                         # Environment variables (optional, for secrets)
+
+==============================================================================
+KEY DIFFERENCES FROM FLASK:
+==============================================================================
+
+1. SETTINGS vs CONFIG:
+   - Flask: config.py with simple variables
+   - Django: settings.py with more structure
+
+2. ROUTES vs VIEWS:
+   - Flask: @app.route() decorators in app.py
+   - Django: URL patterns in urls.py pointing to views in views.py
+
+3. DATABASE:
+   - Flask: Manual database setup with SQLAlchemy
+   - Django: Built-in ORM with models.py, automatic migrations
+
+4. TEMPLATES:
+   - Flask: templates/ folder at root
+   - Django: templates/ inside each app folder
+
+5. STATIC FILES:
+   - Flask: static/ folder at root
+   - Django: static/ inside each app, collected via collectstatic
+
+==============================================================================
+QUICK START COMMANDS:
+==============================================================================
+
+# Create Django project
+django-admin startproject inventory_project
+cd inventory_project
+
+# Create inventory app
+python manage.py startapp inventory
+
+# After defining models
+python manage.py makemigrations
+python manage.py migrate
+
+# Create superuser for admin panel
+python manage.py createsuperuser
+
+# Run development server
+python manage.py runserver
+
+==============================================================================
+"""
+
+# Example settings.py snippet
+SETTINGS_EXAMPLE = """
+# inventory_project/settings.py
+
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'inventory',  # Your app
+]
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
+
+# For PostgreSQL (when you want to switch):
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'inventory_db',
+#         'USER': 'your_username',
+#         'PASSWORD': 'your_password',
+#         'HOST': 'localhost',
+#         'PORT': '5432',
+#     }
+# }
+
+LOGIN_URL = '/login/'
+LOGIN_REDIRECT_URL = '/dashboard/'
+"""
+
+# Example models.py
+MODELS_EXAMPLE = """
+# inventory/models.py
+from django.db import models
+from django.contrib.auth.models import User
+
+class Stock(models.Model):
+    item_name = models.CharField(max_length=200)
+    quantity = models.IntegerField(default=0)
+    unit = models.CharField(max_length=50)
+    reorder_level = models.IntegerField(default=10)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.item_name
+
+class Project(models.Model):
+    project_name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    status = models.CharField(max_length=50, default='Active')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.project_name
+
+class StockAllocation(models.Model):
+    stock = models.ForeignKey(Stock, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    quantity_allocated = models.IntegerField()
+    allocated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    allocated_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.stock.item_name} -> {self.project.project_name}"
+"""
+
+# Example views.py
+VIEWS_EXAMPLE = """
+# inventory/views.py
+from django.shortcuts import render, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth import authenticate, login
+from .models import Stock, Project, StockAllocation
+
+def login_view(request):
+    if request.method == 'POST':
+        username = request.POST['username']
+        password = request.POST['password']
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect('dashboard')
+    return render(request, 'inventory/login.html')
+
+@login_required
+def dashboard(request):
+    total_items = Stock.objects.count()
+    low_stock = Stock.objects.filter(quantity__lt=models.F('reorder_level')).count()
+    active_projects = Project.objects.filter(status='Active').count()
+    
+    context = {
+        'total_items': total_items,
+        'low_stock': low_stock,
+        'active_projects': active_projects,
+    }
+    return render(request, 'inventory/dashboard.html', context)
+
+@login_required
+def main_stock(request):
+    stocks = Stock.objects.all()
+    return render(request, 'inventory/main_stock.html', {'stocks': stocks})
+
+@login_required
+def projects(request):
+    projects = Project.objects.all()
+    return render(request, 'inventory/projects.html', {'projects': projects})
+"""
+
+# Example urls.py
+URLS_EXAMPLE = """
+# inventory/urls.py
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('login/', views.login_view, name='login'),
+    path('dashboard/', views.dashboard, name='dashboard'),
+    path('stock/', views.main_stock, name='main_stock'),
+    path('projects/', views.projects, name='projects'),
+    path('allocate/', views.allocate, name='allocate'),
+    path('project-inventory/<int:project_id>/', views.project_inventory, name='project_inventory'),
+]
+
+# inventory_project/urls.py (root)
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', include('inventory.urls')),
+]
+"""
